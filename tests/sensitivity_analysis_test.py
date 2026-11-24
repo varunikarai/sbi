@@ -260,6 +260,31 @@ def test_find_directions_with_regression_net(
     assert torch.allclose(torch.linalg.norm(evecs, dim=0), torch.ones(d), atol=1e-5)
 
 
+@pytest.mark.parametrize("num_monte_carlo_samples", [10, 1000])
+def test_find_directions_eigenvalues_do_not_depend_on_sample_count(
+    num_monte_carlo_samples,
+) -> None:
+    """Tests the eigenvalues of M = E[grad f grad f^T] on a linear property.
+
+    For f(theta) = a^T theta the gradient is `a` everywhere, so M = a a^T for any
+    number of Monte Carlo samples. Its eigenvalues are 0 and |a|^2.
+    """
+    a = torch.tensor([3.0, 4.0])
+
+    class _LinearPosterior(_PosteriorStub):
+        def potential(self, theta: Tensor, track_gradients: bool = True) -> Tensor:
+            return theta @ a
+
+    evals, evecs = ActiveSubspace(_LinearPosterior(2)).find_directions(
+        posterior_log_prob_as_property=True,
+        norm_gradients_to_prior=False,
+        num_monte_carlo_samples=num_monte_carlo_samples,
+    )
+
+    assert torch.allclose(evals, torch.tensor([0.0, 25.0]), atol=1e-4)
+    assert torch.allclose(evecs[:, -1], a / a.norm(), atol=1e-5)
+
+
 def test_find_directions_with_posterior_log_prob_warns(
     toy_theta_property, posterior_stub
 ) -> None:
